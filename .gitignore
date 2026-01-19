@@ -1,0 +1,8 @@
+# .env files
+.env
+.env.local
+.env.*.local
+node_modules
+# Uploads & receipts (don't commit user files)
+backend/uploads/
+backend/receipts/
