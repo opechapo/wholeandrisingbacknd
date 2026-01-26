@@ -2,19 +2,20 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, unique: true, required: true },
-  password: { type: String },
+  email: { type: String, unique: true, sparse: true }, // sparse allows null for admin
+  password: { type: String, required: true },
   role: { type: String, enum: ["admin", "student"], default: "student" },
-  subscribed: { type: Boolean, default: false }, // For newsletters
+  subscribed: { type: Boolean, default: false },
 });
 
-userSchema.pre("save", async function (next) {
+// Pre-save hook: hash password if modified (async, no 'next' needed)
+userSchema.pre("save", async function () {
   if (this.isModified("password")) {
     this.password = await bcrypt.hash(this.password, 10);
   }
-  next();
 });
 
+// Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
