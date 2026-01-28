@@ -16,7 +16,7 @@ app.use("/api/products", require("./routes/products"));
 app.use("/api/orders", require("./routes/orders"));
 app.use("/api/payments", require("./routes/payments"));
 app.use("/uploads", express.static("uploads"));
-app.use("/receipts", express.static(path.join(__dirname, "receipts")));
+// app.use("/receipts", express.static(path.join(__dirname, "receipts")));
 
 const authMiddleware = (req, res, next) => {
   // Verify JWT from headers
