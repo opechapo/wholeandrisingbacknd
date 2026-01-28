@@ -1,23 +1,38 @@
 const mongoose = require("mongoose");
 
-const productSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  description: { type: String, required: true },
-  price: { type: Number, required: true },
-  category: {
-    type: String,
-    enum: ["ebooks", "workbooks", "conversation", "courses"],
-    required: true,
-  },
-  fileUrl: { type: String },
-  enrollments: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-  progress: [
-    {
-      user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      progress: { type: Number, default: 0 },
+const productSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    price: { type: Number, required: true },
+    category: {
+      type: String,
+      enum: ["ebooks", "workbooks", "conversation", "courses"],
+      required: true,
     },
-  ],
-  createdAt: { type: Date, default: Date.now },
-});
+    pricingModel: {
+      type: String,
+      enum: ["free", "paid"],
+      default: "paid",
+      required: true,
+    },
+    fileUrl: { type: String },
+    featuredImageUrl: { type: String },
+    overview: { type: String },
+    curriculum: [
+      {
+        title: { type: String, required: true },
+        summary: { type: String },
+        lessons: [
+          {
+            name: { type: String, required: true },
+            content: { type: String },
+          },
+        ],
+      },
+    ],
+  },
+  { timestamps: true },
+);
 
 module.exports = mongoose.model("Product", productSchema);

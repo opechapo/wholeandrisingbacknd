@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
 
 const authMiddleware = (req, res, next) => {
-  // Get token from Authorization header: Bearer <token>
   const authHeader = req.header("Authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -13,8 +12,11 @@ const authMiddleware = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { id, role }
+
+    // Do NOT enforce admin here anymore — move to specific routes
     next();
   } catch (err) {
+    console.error("JWT verification failed:", err.message);
     res.status(401).json({ msg: "Token is not valid" });
   }
 };
