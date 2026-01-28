@@ -5,7 +5,11 @@ const path = require("path");
 const dotenv = require("dotenv");
 
 dotenv.config();
-connectDB();
+
+// Debug: log the URI (remove/comment after testing)
+console.log("MONGODB_URI:", process.env.MONGODB_URI ? "exists" : "MISSING!");
+
+connectDB(); // ← this should now see the env var
 
 const app = express();
 app.use(cors());
@@ -14,15 +18,12 @@ app.use(express.json());
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/products", require("./routes/products"));
 app.use("/api/orders", require("./routes/orders"));
-app.use("/api/payments", require("./routes/payments"));
+// app.use("/api/payments", require("./routes/payments"));
+
 app.use("/uploads", express.static("uploads"));
-// app.use("/receipts", express.static(path.join(__dirname, "receipts")));
 
-const authMiddleware = (req, res, next) => {
-  // Verify JWT from headers
-  // req.user = decoded;
-  next();
-};
+const PORT = process.env.PORT || 5000; // Render usually injects 10000
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
