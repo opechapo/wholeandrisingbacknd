@@ -23,7 +23,8 @@ app.use("/api/orders", require("./routes/orders"));
 app.use("/uploads", express.static("uploads"));
 
 const PORT = process.env.PORT || 5000; // Render usually injects 10000
+const FRONTEND_URL = "https://wholeandrising.vercel.app/";
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT} ${FRONTEND_URL}`);
 });
