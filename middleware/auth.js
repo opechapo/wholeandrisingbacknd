@@ -13,7 +13,6 @@ const authMiddleware = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { id, role }
 
-    // Do NOT enforce admin here anymore — move to specific routes
     next();
   } catch (err) {
     console.error("JWT verification failed:", err.message);
