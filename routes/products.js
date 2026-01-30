@@ -2,8 +2,13 @@ const express = require("express");
 const router = express.Router();
 const productController = require("../controllers/productController");
 const multer = require("multer");
-const upload = multer({ dest: "uploads/" });
-const authMiddleware = require("../middleware/auth"); // assume you have admin check
+const authMiddleware = require("../middleware/auth");
+
+// IMPORTANT CHANGE: Use MEMORY storage (buffer) instead of disk
+const upload = multer({
+  storage: multer.memoryStorage(), // ← Files stay in memory → buffer available
+  limits: { fileSize: 50 * 1024 * 1024 }, // Optional: 50MB max file size
+});
 
 // Public – anyone can see products
 router.get("/", productController.getProducts);
