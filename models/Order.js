@@ -10,7 +10,7 @@ const orderSchema = new mongoose.Schema({
     required: true,
   },
   amount: { type: Number, required: true },
-  paypalOrderId: { type: String }, // PayPal order ID
+  paypalOrderId: { type: String },
   paypalCaptureId: { type: String }, // PayPal capture/transaction ID
   status: {
     type: String,
