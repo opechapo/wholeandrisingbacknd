@@ -20,7 +20,6 @@ app.use("/api/orders", require("./routes/orders"));
 app.use("/api/payments", require("./routes/payments"));
 
 // REMOVED: app.use("/uploads", express.static("uploads"));
-// No longer needed — ImageKit serves images directly
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = "https://wholeandrising.vercel.app/";

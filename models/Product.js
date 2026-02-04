@@ -23,12 +23,7 @@ const productSchema = new mongoose.Schema(
       {
         title: { type: String, required: true },
         summary: { type: String },
-        lessons: [
-          {
-            name: { type: String, required: true },
-            content: { type: String },
-          },
-        ],
+        content: { type: String },
       },
     ],
   },
