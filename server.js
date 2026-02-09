@@ -19,8 +19,7 @@ app.use("/api/products", require("./routes/products"));
 app.use("/api/orders", require("./routes/orders"));
 app.use("/api/payments", require("./routes/payments"));
 
-// REMOVED: app.use("/uploads", express.static("uploads"));
-
+// REMOVED: app.use("/uploads", express.static("uploads"))
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = "https://wholeandrising.vercel.app/";
 
