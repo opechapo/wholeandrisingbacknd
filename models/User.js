@@ -8,7 +8,6 @@ const userSchema = new mongoose.Schema({
   subscribed: { type: Boolean, default: false },
 });
 
-// Pre-save hook: hash password if modified (async, no 'next' needed)
 userSchema.pre("save", async function () {
   if (this.isModified("password")) {
     this.password = await bcrypt.hash(this.password, 10);
