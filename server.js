@@ -11,14 +11,26 @@ console.log("MONGODB_URI:", process.env.MONGODB_URI ? "exists" : "MISSING!");
 connectDB();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.raw({ type: "application/json" }));
 
+// IMPORTANT: Apply CORS and other non-body middlewares first
+app.use(cors());
+
+// Mount the webhook route with raw parser BEFORE global json (to preserve raw body for signature verification)
+const paymentsRoutes = require("./routes/payments");
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  paymentsRoutes.webhookHandler,
+);
+
+// NOW apply the global JSON parser for all other routes
+app.use(express.json());
+
+// Your other routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/products", require("./routes/products"));
 app.use("/api/orders", require("./routes/orders"));
-app.use("/api/payments", require("./routes/payments"));
+app.use("/api/payments", paymentsRoutes); // ← Mount the router for other payment routes (without webhook)
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = "https://wholeandrising.vercel.app/";

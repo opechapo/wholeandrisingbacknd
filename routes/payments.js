@@ -103,132 +103,123 @@ router.post("/create-checkout-session", authMiddleware, async (req, res) => {
   }
 });
 
-// ─── STRIPE WEBHOOK (for checkout.session.completed) ────────────────────────────
-router.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    console.log("[WEBHOOK] Received request from Stripe");
-    console.log("[WEBHOOK] Headers:", JSON.stringify(req.headers, null, 2));
-    console.log(
-      "[WEBHOOK] Raw body (first 200 chars):",
-      req.body.toString().substring(0, 200),
-    );
+// ─── STRIPE WEBHOOK HANDLER (exported for use in server.js with raw parser) ────────────────────────────
+const webhookHandler = async (req, res) => {
+  console.log("[WEBHOOK] Received request from Stripe");
+  console.log("[WEBHOOK] Headers:", JSON.stringify(req.headers, null, 2));
+  console.log(
+    "[WEBHOOK] Raw body (first 200 chars):",
+    req.body.toString().substring(0, 200),
+  );
 
-    const sig = req.headers["stripe-signature"];
-    let event;
+  const sig = req.headers["stripe-signature"];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET,
+    );
+    console.log("[WEBHOOK] Event verified successfully");
+    console.log("[WEBHOOK] Event ID:", event.id);
+    console.log("[WEBHOOK] Event type:", event.type);
+  } catch (err) {
+    console.error("[WEBHOOK] Signature verification failed:", err.message);
+    console.error("[WEBHOOK] Provided signature:", sig);
+    console.error(
+      "[WEBHOOK] Expected secret:",
+      process.env.STRIPE_WEBHOOK_SECRET ? "Set" : "NOT SET!",
+    );
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    console.log("[WEBHOOK] Session completed");
+    console.log("[WEBHOOK] Session ID:", session.id);
+    console.log("[WEBHOOK] Payment status:", session.payment_status);
+    console.log("[WEBHOOK] Client reference ID:", session.client_reference_id);
+    console.log("[WEBHOOK] Customer email:", session.customer_email);
+
+    const [userId, productId] = (session.client_reference_id || "").split("|");
+
+    if (!userId || !productId) {
+      console.error(
+        "[WEBHOOK] Invalid client_reference_id - cannot split userId|productId",
+      );
+      return res.json({ received: true }); // Acknowledge but skip processing
+    }
+
+    console.log("[WEBHOOK] Parsed userId:", userId);
+    console.log("[WEBHOOK] Parsed productId:", productId);
 
     try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET,
-      );
-      console.log("[WEBHOOK] Event verified successfully");
-      console.log("[WEBHOOK] Event ID:", event.id);
-      console.log("[WEBHOOK] Event type:", event.type);
-    } catch (err) {
-      console.error("[WEBHOOK] Signature verification failed:", err.message);
-      console.error("[WEBHOOK] Provided signature:", sig);
-      console.error(
-        "[WEBHOOK] Expected secret:",
-        process.env.STRIPE_WEBHOOK_SECRET ? "Set" : "NOT SET!",
-      );
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
+      const order = await Order.findOne({ stripeSessionId: session.id });
+      if (order) {
+        console.log("[WEBHOOK] Found matching order ID:", order._id);
+        console.log("[WEBHOOK] Current order status:", order.status);
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-      console.log("[WEBHOOK] Session completed");
-      console.log("[WEBHOOK] Session ID:", session.id);
-      console.log("[WEBHOOK] Payment status:", session.payment_status);
-      console.log(
-        "[WEBHOOK] Client reference ID:",
-        session.client_reference_id,
-      );
-      console.log("[WEBHOOK] Customer email:", session.customer_email);
+        order.status = "paid";
+        order.stripePaymentIntentId = session.payment_intent;
+        order.downloadAccess = true;
+        order.receiptUrl = `https://dashboard.stripe.com/${process.env.NODE_ENV === "production" ? "" : "test/"}payments/${session.payment_intent}`;
 
-      const [userId, productId] = (session.client_reference_id || "").split(
-        "|",
-      );
+        // Optional: Generate and send invoice
+        try {
+          const invoice = await stripe.invoices.create({
+            customer: session.customer,
+            collection_method: "send_invoice",
+            days_until_due: 30,
+          });
+          console.log("[WEBHOOK] Created invoice ID:", invoice.id);
 
-      if (!userId || !productId) {
-        console.error(
-          "[WEBHOOK] Invalid client_reference_id - cannot split userId|productId",
-        );
-        return res.json({ received: true }); // Acknowledge but skip processing
-      }
+          await stripe.invoiceItems.create({
+            customer: session.customer,
+            amount: session.amount_total,
+            currency: "gbp",
+            description: "Your product purchase",
+            invoice: invoice.id,
+          });
+          console.log("[WEBHOOK] Added invoice item");
 
-      console.log("[WEBHOOK] Parsed userId:", userId);
-      console.log("[WEBHOOK] Parsed productId:", productId);
-
-      try {
-        const order = await Order.findOne({ stripeSessionId: session.id });
-        if (order) {
-          console.log("[WEBHOOK] Found matching order ID:", order._id);
-          console.log("[WEBHOOK] Current order status:", order.status);
-
-          order.status = "paid";
-          order.stripePaymentIntentId = session.payment_intent;
-          order.downloadAccess = true;
-          order.receiptUrl = `https://dashboard.stripe.com/${process.env.NODE_ENV === "production" ? "" : "test/"}payments/${session.payment_intent}`;
-
-          // Optional: Generate and send invoice
-          try {
-            const invoice = await stripe.invoices.create({
-              customer: session.customer,
-              collection_method: "send_invoice",
-              days_until_due: 30,
-            });
-            console.log("[WEBHOOK] Created invoice ID:", invoice.id);
-
-            await stripe.invoiceItems.create({
-              customer: session.customer,
-              amount: session.amount_total,
-              currency: "gbp",
-              description: "Your product purchase",
-              invoice: invoice.id,
-            });
-            console.log("[WEBHOOK] Added invoice item");
-
-            const finalizedInvoice = await stripe.invoices.finalizeInvoice(
-              invoice.id,
-            );
-            await stripe.invoices.sendInvoice(invoice.id);
-
-            order.stripeInvoiceId = invoice.id;
-            order.receiptUrl = finalizedInvoice.hosted_invoice_url;
-            console.log(
-              "[WEBHOOK] Finalized and sent invoice - URL:",
-              order.receiptUrl,
-            );
-          } catch (invoiceErr) {
-            console.error(
-              "[WEBHOOK] Invoice creation failed:",
-              invoiceErr.message,
-            );
-            // Continue without failing webhook
-          }
-
-          await order.save();
-          console.log("[WEBHOOK] Order successfully updated to 'paid'");
-        } else {
-          console.error(
-            "[WEBHOOK] No matching order found for session ID:",
-            session.id,
+          const finalizedInvoice = await stripe.invoices.finalizeInvoice(
+            invoice.id,
           );
-        }
-      } catch (updateErr) {
-        console.error("[WEBHOOK] Error updating order:", updateErr.message);
-      }
-    } else {
-      console.log("[WEBHOOK] Ignored event type:", event.type);
-    }
+          await stripe.invoices.sendInvoice(invoice.id);
 
-    // Always acknowledge the webhook to Stripe
-    res.json({ received: true });
-  },
-);
+          order.stripeInvoiceId = invoice.id;
+          order.receiptUrl = finalizedInvoice.hosted_invoice_url;
+          console.log(
+            "[WEBHOOK] Finalized and sent invoice - URL:",
+            order.receiptUrl,
+          );
+        } catch (invoiceErr) {
+          console.error(
+            "[WEBHOOK] Invoice creation failed:",
+            invoiceErr.message,
+          );
+          // Continue without failing webhook
+        }
+
+        await order.save();
+        console.log("[WEBHOOK] Order successfully updated to 'paid'");
+      } else {
+        console.error(
+          "[WEBHOOK] No matching order found for session ID:",
+          session.id,
+        );
+      }
+    } catch (updateErr) {
+      console.error("[WEBHOOK] Error updating order:", updateErr.message);
+    }
+  } else {
+    console.log("[WEBHOOK] Ignored event type:", event.type);
+  }
+
+  // Always acknowledge the webhook to Stripe
+  res.json({ received: true });
+};
 
 router.get("/verify-session/:sessionId", authMiddleware, async (req, res) => {
   const { sessionId } = req.params;
@@ -253,3 +244,4 @@ router.get("/verify-session/:sessionId", authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.webhookHandler = webhookHandler;
