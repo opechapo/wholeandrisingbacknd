@@ -5,48 +5,73 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const authMiddleware = require("../middleware/auth");
 
-// ─── CREATE ORDER FOR FREE PRODUCTS ONLY ───────────────────────────────────────
-router.post("/create-order", authMiddleware, async (req, res) => {
-  const { productId, email } = req.body; // Email optional
-  const userId = req.user.id;
-  const userEmail = email || req.user.email || "guest@example.com";
+// ─── CREATE ORDER FOR FREE PRODUCTS (NOW GUEST-FRIENDLY) ───────────────────────
+router.post("/create-order", async (req, res) => {
+  const { productId, email } = req.body;
+
+  // Email is now REQUIRED for all claims (guest or logged-in)
+  if (!email) {
+    return res.status(400).json({
+      msg: "Email address is required to claim this free product and receive access instructions.",
+    });
+  }
 
   try {
     const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ msg: "Product not found" });
+    if (!product) {
+      return res.status(404).json({ msg: "Product not found" });
+    }
 
     if (product.pricingModel !== "free") {
-      return res
-        .status(400)
-        .json({ msg: "Use checkout session for paid products" });
+      return res.status(400).json({
+        msg: "This product is not free. Use checkout session for paid products.",
+      });
     }
 
-    const existingOrder = await Order.findOne({ userId, productId });
+    // Check if this email already claimed it (prevents duplicate claims)
+    const existingOrder = await Order.findOne({
+      userEmail: email.toLowerCase().trim(),
+      productId,
+      status: "paid",
+    });
+
     if (existingOrder) {
-      return res.json({ id: existingOrder._id, status: "already_accessed" });
+      return res.json({
+        id: existingOrder._id,
+        status: "already_accessed",
+        msg: "This email has already claimed this product.",
+      });
     }
 
+    // Create order – no userId for guests
     const order = new Order({
-      userId,
-      userEmail,
+      // userId: undefined for guests
+      userEmail: email.trim(),
       productId,
       amount: 0,
       status: "paid",
       downloadAccess: true,
     });
+
     await order.save();
 
-    return res.json({ id: order._id, status: "free" });
+    return res.json({
+      id: order._id,
+      status: "free",
+      msg: "Free product claimed successfully! Check your email for access instructions.",
+    });
   } catch (err) {
-    console.error("Create order error:", err);
-    res.status(500).json({ msg: "Server error", error: err.message });
+    console.error("Create free order error:", err);
+    res.status(500).json({
+      msg: "Server error while processing free claim",
+      error: err.message,
+    });
   }
 });
 
-// ─── CREATE STRIPE CHECKOUT SESSION FOR PAID PRODUCTS ────────────────────────────
-router.post("/create-checkout-session", authMiddleware, async (req, res) => {
-  const { productId } = req.body;
-  const userId = req.user.id;
+// ─── CREATE STRIPE CHECKOUT SESSION FOR PAID PRODUCTS (GUEST-FRIENDLY) ────────
+router.post("/create-checkout-session", async (req, res) => {
+  const { productId, email } = req.body;
 
   try {
     const product = await Product.findById(productId);
@@ -56,6 +81,12 @@ router.post("/create-checkout-session", authMiddleware, async (req, res) => {
       return res
         .status(400)
         .json({ msg: "Use create-order for free products" });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        msg: "Email is required for purchase receipt and access",
+      });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -75,14 +106,13 @@ router.post("/create-checkout-session", authMiddleware, async (req, res) => {
       mode: "payment",
       success_url: process.env.STRIPE_SUCCESS_URL,
       cancel_url: process.env.STRIPE_CANCEL_URL,
-      client_reference_id: `${userId}|${productId}`,
-      customer_email: req.user.email,
+      client_reference_id: `guest_${Date.now().toString(36)}|${productId}`,
+      customer_email: email.trim(),
     });
 
-    // Create pending order
+    // Create pending order – no userId for guests
     const order = new Order({
-      userId,
-      userEmail: req.user.email || "guest@example.com",
+      userEmail: email.trim(),
       productId,
       amount: product.price,
       stripeSessionId: session.id,
@@ -90,10 +120,9 @@ router.post("/create-checkout-session", authMiddleware, async (req, res) => {
     });
     await order.save();
 
-    // Return session id AND url (critical for frontend redirect)
     res.json({
       id: session.id,
-      url: session.url, // ← This is what the frontend needs
+      url: session.url,
     });
   } catch (err) {
     console.error("Create checkout session error:", err);
@@ -103,7 +132,7 @@ router.post("/create-checkout-session", authMiddleware, async (req, res) => {
   }
 });
 
-// ─── STRIPE WEBHOOK HANDLER (exported for use in server.js with raw parser) ────────────────────────────
+// ─── STRIPE WEBHOOK HANDLER ────────────────────────────────────────────────────
 const webhookHandler = async (req, res) => {
   console.log("[WEBHOOK] Received request from Stripe");
   console.log("[WEBHOOK] Headers:", JSON.stringify(req.headers, null, 2));
@@ -142,17 +171,14 @@ const webhookHandler = async (req, res) => {
     console.log("[WEBHOOK] Client reference ID:", session.client_reference_id);
     console.log("[WEBHOOK] Customer email:", session.customer_email);
 
-    const [userId, productId] = (session.client_reference_id || "").split("|");
+    const parts = (session.client_reference_id || "").split("|");
+    const isGuest = parts[0].startsWith("guest_");
+    const productId = parts[1] || parts[0];
 
-    if (!userId || !productId) {
-      console.error(
-        "[WEBHOOK] Invalid client_reference_id - cannot split userId|productId",
-      );
-      return res.json({ received: true }); // Acknowledge but skip processing
+    if (!productId) {
+      console.error("[WEBHOOK] No productId in client_reference_id");
+      return res.json({ received: true });
     }
-
-    console.log("[WEBHOOK] Parsed userId:", userId);
-    console.log("[WEBHOOK] Parsed productId:", productId);
 
     try {
       const order = await Order.findOne({ stripeSessionId: session.id });
@@ -165,7 +191,7 @@ const webhookHandler = async (req, res) => {
         order.downloadAccess = true;
         order.receiptUrl = `https://dashboard.stripe.com/${process.env.NODE_ENV === "production" ? "" : "test/"}payments/${session.payment_intent}`;
 
-        // Optional: Generate and send invoice
+        // Optional: invoice generation (kept as-is)
         try {
           const invoice = await stripe.invoices.create({
             customer: session.customer,
@@ -199,7 +225,6 @@ const webhookHandler = async (req, res) => {
             "[WEBHOOK] Invoice creation failed:",
             invoiceErr.message,
           );
-          // Continue without failing webhook
         }
 
         await order.save();
@@ -217,7 +242,6 @@ const webhookHandler = async (req, res) => {
     console.log("[WEBHOOK] Ignored event type:", event.type);
   }
 
-  // Always acknowledge the webhook to Stripe
   res.json({ received: true });
 };
 
@@ -228,7 +252,7 @@ router.get("/verify-session/:sessionId", authMiddleware, async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     const order = await Order.findOne({ stripeSessionId: sessionId });
 
-    if (!order || order.userId.toString() !== req.user.id) {
+    if (!order || (order.userId && order.userId.toString() !== req.user.id)) {
       return res.status(403).json({ msg: "Unauthorized" });
     }
 
