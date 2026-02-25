@@ -9,19 +9,16 @@ exports.signup = async (req, res) => {
     if (!password) {
       return res.status(400).json({ msg: "Password is required" });
     }
-    if (!password || password.length < 6) {
+    if (password.length < 6) {
       return res
         .status(400)
         .json({ msg: "Password must be at least 6 characters" });
     }
 
     if (role === "admin") {
-      // Admin: only password, no email
       if (email) {
         return res.status(400).json({ msg: "Admin accounts do not use email" });
       }
-
-      // Check if admin already exists (you can limit to one admin)
       const existingAdmin = await User.findOne({ role: "admin" });
       if (existingAdmin) {
         return res.status(400).json({ msg: "Admin account already exists" });
@@ -87,7 +84,7 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" },
+      { expiresIn: "3d" },
     );
     res.json({ token, role: user.role });
   } catch (err) {
@@ -96,7 +93,7 @@ exports.login = async (req, res) => {
   }
 };
 
-// Change password (admin only for now – can be extended later)
+// Change password (admin only)
 exports.changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
@@ -124,7 +121,7 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ msg: "Current password is incorrect" });
     }
 
-    // Update password → pre-save hook will hash it
+    // Update password
     user.password = newPassword;
     await user.save();
 
@@ -133,4 +130,16 @@ exports.changePassword = async (req, res) => {
     console.error("Change password error:", err);
     res.status(500).json({ msg: "Server error" });
   }
+};
+
+// NEW: Simple keep-alive / ping endpoint
+// It confirms the token is still valid and helps prevent session timeout
+exports.ping = async (req, res) => {
+  // req.user is already populated by authMiddleware
+  res.status(200).json({
+    msg: "pong",
+    userId: req.user.id,
+    role: req.user.role,
+    timestamp: new Date().toISOString(),
+  });
 };

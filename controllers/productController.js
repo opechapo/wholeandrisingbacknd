@@ -7,7 +7,6 @@ const imagekit = new ImageKit({
   urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
 });
 
-// Get all products (public - anyone can see)
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
@@ -18,7 +17,7 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// Create new product (admin only)
+// Create new product
 exports.addProduct = async (req, res) => {
   try {
     const {
@@ -34,7 +33,6 @@ exports.addProduct = async (req, res) => {
     let fileUrl = null;
     let featuredImageUrl = null;
 
-    // Upload main file (PDF, ZIP, video, etc.) if provided
     if (req.files?.file?.[0]) {
       const file = req.files.file[0];
       const uploadResponse = await imagekit.upload({
@@ -44,8 +42,6 @@ exports.addProduct = async (req, res) => {
       });
       fileUrl = uploadResponse.url;
     }
-
-    // Upload featured image (thumbnail) if provided
     if (req.files?.featuredImage?.[0]) {
       const featuredImage = req.files.featuredImage[0];
       const uploadResponse = await imagekit.upload({
@@ -103,7 +99,6 @@ exports.updateProduct = async (req, res) => {
       curriculum,
     } = req.body;
 
-    // Update fields only if provided
     if (title !== undefined) product.title = title;
     if (description !== undefined) product.description = description;
     if (category !== undefined) product.category = category;
@@ -128,8 +123,6 @@ exports.updateProduct = async (req, res) => {
         console.error("Curriculum parse error on update:", e);
       }
     }
-
-    // Replace main file if new one uploaded
     if (req.files?.file?.[0]) {
       const file = req.files.file[0];
       const uploadResponse = await imagekit.upload({
@@ -139,8 +132,6 @@ exports.updateProduct = async (req, res) => {
       });
       product.fileUrl = uploadResponse.url;
     }
-
-    // Replace featured image if new one uploaded
     if (req.files?.featuredImage?.[0]) {
       const featuredImage = req.files.featuredImage[0];
       const uploadResponse = await imagekit.upload({
@@ -166,16 +157,12 @@ exports.deleteProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ msg: "Product not found" });
     }
-
-    // Optional: Delete files from ImageKit if they exist
     if (product.fileUrl) {
       try {
-        // Extract file path from URL (ImageKit path)
         const filePath = product.fileUrl.split(imagekit.config.urlEndpoint)[1];
         await imagekit.deleteFile(filePath);
       } catch (deleteErr) {
         console.warn("Failed to delete main file from ImageKit:", deleteErr);
-        // Don't fail the whole delete if ImageKit delete fails
       }
     }
 
@@ -200,16 +187,10 @@ exports.deleteProduct = async (req, res) => {
     res.status(500).json({ msg: "Server error", error: err.message });
   }
 };
-
-// Optional: Progress update route (if you still need it)
-// You can expand this later if students track progress
 exports.updateProgress = async (req, res) => {
   try {
     const { productId, progress } = req.body;
-    const userId = req.user.id; // from authMiddleware
-
-    // Example: you could have a separate Progress model
-    // For now, just return success
+    const userId = req.user.id;
     res.json({ msg: "Progress updated", productId, progress, userId });
   } catch (err) {
     console.error("Update progress error:", err);

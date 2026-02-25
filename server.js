@@ -13,13 +13,13 @@ connectDB();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.raw({ type: "application/json" }));
 
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/products", require("./routes/products"));
 app.use("/api/orders", require("./routes/orders"));
 app.use("/api/payments", require("./routes/payments"));
 
-// REMOVED: app.use("/uploads", express.static("uploads"))
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = "https://wholeandrising.vercel.app/";
 

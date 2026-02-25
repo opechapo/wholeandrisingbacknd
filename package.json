@@ -12,7 +12,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@paypal/checkout-server-sdk": "^1.0.3",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -22,7 +21,8 @@
     "mongoose": "^9.0.0",
     "multer": "^2.0.1",
     "nodemailer": "^7.0.13",
-    "pdfkit": "^0.17.2"
+    "pdfkit": "^0.17.2",
+    "stripe": "^20.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

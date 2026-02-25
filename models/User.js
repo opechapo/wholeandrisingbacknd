@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, unique: true, sparse: true }, // sparse allows null for admin
+  email: { type: String, unique: true, sparse: true }, 
   password: { type: String, required: true },
   role: { type: String, enum: ["admin", "student"], default: "student" },
   subscribed: { type: Boolean, default: false },
