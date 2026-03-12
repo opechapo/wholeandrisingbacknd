@@ -12,10 +12,8 @@ connectDB();
 
 const app = express();
 
-// IMPORTANT: Apply CORS and other non-body middlewares first
 app.use(cors());
 
-// Mount the webhook route with raw parser BEFORE global json (to preserve raw body for signature verification)
 const paymentsRoutes = require("./routes/payments");
 app.post(
   "/api/payments/webhook",

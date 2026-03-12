@@ -110,14 +110,22 @@ router.post("/create-checkout-session", async (req, res) => {
       customer_email: email.trim(),
     });
 
-    // Create pending order – no userId for guests
+    // IMPROVED: support both logged-in and guest users
+    let userId = null;
+    if (req.user?.id) {
+      userId = new mongoose.Types.ObjectId(req.user.id);
+    }
+
+    // Create pending order
     const order = new Order({
+      userId, // ← now set only if logged in
       userEmail: email.trim(),
       productId,
       amount: product.price,
       stripeSessionId: session.id,
       status: "pending",
     });
+
     await order.save();
 
     res.json({

@@ -30,6 +30,14 @@ exports.addProduct = async (req, res) => {
       curriculum,
     } = req.body;
 
+    // Enforce consistency: paid must have price > 0
+    const finalPrice = pricingModel === "free" ? 0 : parseFloat(price || 0);
+    if (pricingModel === "paid" && finalPrice <= 0) {
+      return res.status(400).json({
+        msg: "Paid products must have a price greater than 0",
+      });
+    }
+
     let fileUrl = null;
     let featuredImageUrl = null;
 
@@ -64,7 +72,7 @@ exports.addProduct = async (req, res) => {
     const product = new Product({
       title,
       description,
-      price: pricingModel === "free" ? 0 : parseFloat(price),
+      price: finalPrice,
       category,
       pricingModel,
       fileUrl,
@@ -114,6 +122,13 @@ exports.updateProduct = async (req, res) => {
       product.price = parseFloat(price);
     }
 
+    // Enforce consistency after updates: paid must have price > 0
+    if (product.pricingModel === "paid" && product.price <= 0) {
+      return res.status(400).json({
+        msg: "Paid products must have a price greater than 0",
+      });
+    }
+
     if (overview !== undefined) product.overview = overview;
 
     if (curriculum !== undefined) {
@@ -150,7 +165,7 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// Delete product (admin only)
+// Delete product
 exports.deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);

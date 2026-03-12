@@ -8,13 +8,21 @@ const axios = require("axios");
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
 
+// ─── MULTER CONFIG ────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50 MB for files (PDF + image)
+    fieldSize: 50 * 1024 * 1024,
+    fields: 25, // max number of non-file fields
+    files: 4, // max number of file fields
+  },
 });
 
+// ─── PUBLIC ─────────────
 router.get("/", productController.getProducts);
 
+// ─── ADMIN ONLY ───────────────────────────────────────────────────
 router.post(
   "/",
   authMiddleware,
@@ -39,7 +47,7 @@ router.delete("/:id", authMiddleware, productController.deleteProduct);
 
 router.post("/progress", authMiddleware, productController.updateProgress);
 
-// ─── PROTECTED DOWNLOAD ROUTE ───────────────────────────────────────────────
+// ─── PROTECTED DOWNLOAD ROUTE ─────────────────────────────────────
 router.get("/:id/download", authMiddleware, async (req, res) => {
   try {
     const productId = req.params.id;
@@ -54,7 +62,6 @@ router.get("/:id/download", authMiddleware, async (req, res) => {
       `[DOWNLOAD] User ${user.id} (${user.role}) requested download for product ${productId}`,
     );
 
-    // Validate IDs early
     if (
       !mongoose.isValidObjectId(productId) ||
       !mongoose.isValidObjectId(user.id)
@@ -63,7 +70,6 @@ router.get("/:id/download", authMiddleware, async (req, res) => {
       return res.status(400).json({ msg: "Invalid product or user ID format" });
     }
 
-    // 1. Find product
     const product = await Product.findById(productId);
     if (!product) {
       console.log(`[DOWNLOAD] Product not found: ${productId}`);
@@ -77,7 +83,6 @@ router.get("/:id/download", authMiddleware, async (req, res) => {
         .json({ msg: "No downloadable file attached to this product" });
     }
 
-    // 2. Verify ownership & access
     const orderQuery = {
       userId: new mongoose.Types.ObjectId(user.id),
       productId: new mongoose.Types.ObjectId(productId),
@@ -100,15 +105,13 @@ router.get("/:id/download", authMiddleware, async (req, res) => {
 
     console.log(`[DOWNLOAD] Access granted - Order ID: ${order._id}`);
 
-    // 3. Stream file from ImageKit
     const fileResponse = await axios({
       url: product.fileUrl,
       method: "GET",
       responseType: "stream",
-      timeout: 30000, // 30 seconds timeout
+      timeout: 30000,
     });
 
-    // Prepare filename
     const safeTitle = product.title
       ? product.title.replace(/[^a-z0-9]/gi, "_")
       : "product";
@@ -118,7 +121,6 @@ router.get("/:id/download", authMiddleware, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
-    // Pipe the stream
     fileResponse.data.pipe(res);
   } catch (err) {
     console.error("[DOWNLOAD] Critical error:", {
@@ -127,7 +129,6 @@ router.get("/:id/download", authMiddleware, async (req, res) => {
       stack: err.stack?.substring(0, 500),
       productId: req.params.id,
       userId: req.user?.id,
-      fileUrl: "unknown",
     });
 
     if (err.response) {
